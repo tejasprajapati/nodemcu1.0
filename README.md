@@ -1,9 +1,7 @@
 # nodemcu1.0
 NodeMCU repo
 
-##################################
-To flash SPIFFS follow below steps
-##################################
+# To flash SPIFFS follow below steps
 1. Create a data directory where the program is saved.
 2. Save files which you want in the SPIFFS system.
 3. Make sure filename does not extend 31 characters.
