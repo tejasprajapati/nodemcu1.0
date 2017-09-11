@@ -15,7 +15,7 @@ NodeMCU repo
 # Values for different condition based on actual reading of moister sensor.
 1. Water only : 405/ 1023
 2. Dry air : 961/ 1023
-3. Recently watered soil : 320 - 340 / 1023
+3. Recently watered soil (95% water content in red soil) : 320 - 340 / 1023
 4. Warm hands : 900 - 920 / 1023
 
 Moister sensor requires 4 to 5 minutes for stable readings. Anyways the plants have the whole lot time to be watered if the electricity is proper.
