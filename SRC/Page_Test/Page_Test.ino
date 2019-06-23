@@ -15,6 +15,8 @@
 #define WATER_CALIBRATED  1
 #define AIR_CALIBRATED  0
 
+#define INTERVAL  60000
+
 typedef enum{
 	OFF = 0,
 	ON,
@@ -30,10 +32,10 @@ const char* ssid = "Tejas";
 const char* password = "7041679923";
  
 int ledPin = LED_BUILTIN; /*  On GPIO3*/
-bool spiffsActive = false, on_display = 0, off_display = 0,one_time_only = 1;
+bool spiffsActive = false, client_requested = 0, off_display = 0,one_time_only = 1;
 File off_f, on_f;
 int value = HIGH; /*  Pin on which LED is there is working in inverted form*/
-int response;
+int response, loop_count;
 String on_content,off_content;
 unsigned int base_value, measure_value;
 int delta_value;
@@ -42,7 +44,11 @@ int soilMoisture;
 int Sensorval;
 
 WiFiServer server(80);
- 
+
+void ICACHE_RAM_ATTR onTimerISR(){
+  loop_count++;
+}
+
 void setup() {
 	Serial.begin(115200);
 	delay(10);
@@ -83,6 +89,8 @@ void setup() {
 	Serial.print("http://");
 	Serial.print(WiFi.localIP());
 	Serial.println("/");
+
+  timer1_attachInterrupt(onTimerISR);
 }
  
 void loop() {
@@ -93,6 +101,17 @@ void loop() {
 	Serial.println("soilMoisture:");
 	Serial.println(soilMoisture, DEC);
 	delay(1000);
+
+ if (soilMoisture > 50 && !client_requested) {
+    digitalWrite(ledPin, HIGH);
+    value = HIGH;
+    response = OFF;
+ } else if (soilMoisture <= 50 && !client_requested) {
+    digitalWrite(ledPin, LOW);
+    value = LOW;
+    response = ON;
+ }
+
 #if 1
 
 	/* Check if a client has connected*/
@@ -121,18 +140,37 @@ void loop() {
 		}
 		one_time_only = 0;
 	}
+
+  Serial.println("loop_count");
+  Serial.println(loop_count, DEC);
+  Serial.println("client requested is");
+  Serial.println(client_requested, DEC);
 	/* Match the request */
-	if (request.indexOf("/LED=OFF") != -1)  {
+	if (request.indexOf("/LED=OFF") != -1) {
 		digitalWrite(ledPin, HIGH);
 		value = HIGH;
 		response = OFF;
+    timer1_disable();
+    timer1_enable(TIM_DIV256, TIM_EDGE, TIM_LOOP);
+    timer1_write(3125); //10ms
+    client_requested = 1;
 	}
-	if (request.indexOf("/LED=ON") != -1)  {
+	if (request.indexOf("/LED=ON") != -1) {
 		digitalWrite(ledPin, LOW);
 		value = LOW;
 		response = ON;
+    timer1_disable();
+    timer1_enable(TIM_DIV256, TIM_EDGE, TIM_LOOP);
+    timer1_write(3125); //10ms
+    client_requested = 1;
 	}
-  
+
+  if (loop_count >= INTERVAL) {
+    client_requested = 0;
+    timer1_disable();
+    loop_count = 0;
+  }
+ 
 	/*  Return the response */
   /* TODO: Put a value in condition for the range that can decide
    * when turn on or turn off
@@ -144,16 +182,13 @@ void loop() {
 				on_content = on_f.readStringUntil('\n');
 				on_content.trim();
 				client.println(on_content);
+        client.println("<meta http-equiv=\"refresh\" content=\"1800\" >");
 				if(on_content.substring(0) == "<html>"){
-					if(sensor_read == ONLY_WATER){
-					client.println("Only water, pump would be turned off\n");
-				} else if(sensor_read == HANDS_ON_SENSOR) {
-					client.println("Pour some water\n");
-				} else {
-					client.println("Keep the pump off so no water wastage\n");
-				}
-			}
-		}
+					if(soilMoisture <= 50){
+            client.println("Plants need some water\n");
+				  }
+			  }
+		  }
 			on_f.close();
 		break;
 
@@ -164,13 +199,10 @@ void loop() {
 				off_content = off_f.readStringUntil('\n');
 				off_content.trim();
 				client.println(off_content);
+        client.println("<meta http-equiv=\"refresh\" content=\"1800\" >");
 				if(off_content.substring(0) == "<html>"){
-					if(sensor_read == ONLY_WATER){
-						client.println("Only water, pump would be turned off\n");
-					} else if(sensor_read == HANDS_ON_SENSOR) {
-						client.println("Pour some water\n");
-					} else {
-						client.println("Keep the pump off so no water wastage\n");
+					if(soilMoisture > 50){
+						client.println("Turn off the tap\n");
 					}
 				}
 			}
@@ -178,7 +210,6 @@ void loop() {
 		break;
 
 		case ERR:
-
 			client.println("File not found ERR 404");
 		break;
 	}
